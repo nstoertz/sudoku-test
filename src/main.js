@@ -86,28 +86,28 @@ function render() {
       </header>
 
       <section class="controls" aria-label="Game controls">
-        <label class="field">
+        <div class="field field--wide">
           <span>Theme</span>
-          <select id="theme-select">
+          <div class="chip-row" id="theme-picker" role="radiogroup" aria-label="Theme">
             ${themes
               .map(
                 (t) =>
-                  `<option value="${t.id}" ${t.id === state.themeId ? "selected" : ""}>${t.name}</option>`,
+                  `<button type="button" class="chip ${t.id === state.themeId ? "chip--active" : ""}" role="radio" aria-checked="${t.id === state.themeId}" data-theme="${t.id}">${t.name}</button>`,
               )
               .join("")}
-          </select>
-        </label>
-        <label class="field">
+          </div>
+        </div>
+        <div class="field field--wide">
           <span>Difficulty</span>
-          <select id="difficulty-select">
+          <div class="chip-row" id="difficulty-picker" role="radiogroup" aria-label="Difficulty">
             ${["easy", "medium", "hard"]
               .map(
                 (d) =>
-                  `<option value="${d}" ${d === state.difficulty ? "selected" : ""}>${d[0].toUpperCase()}${d.slice(1)}</option>`,
+                  `<button type="button" class="chip ${d === state.difficulty ? "chip--active" : ""}" role="radio" aria-checked="${d === state.difficulty}" data-difficulty="${d}">${d[0].toUpperCase()}${d.slice(1)}</button>`,
               )
               .join("")}
-          </select>
-        </label>
+          </div>
+        </div>
         <button type="button" class="btn btn--accent" id="new-game">New puzzle</button>
       </section>
 
@@ -132,18 +132,32 @@ function render() {
 }
 
 function bindChrome() {
-  document.querySelector("#theme-select").addEventListener("change", (e) => {
-    applyTheme(e.target.value);
+  document.querySelector("#theme-picker").addEventListener("click", (e) => {
+    const btn = e.target.closest("[data-theme]");
+    if (!btn) return;
+    applyTheme(btn.dataset.theme);
     document.querySelector(".brand__tag").textContent =
       `${getTheme(state.themeId).name} edition`;
+    document.querySelectorAll("#theme-picker .chip").forEach((chip) => {
+      const active = chip.dataset.theme === state.themeId;
+      chip.classList.toggle("chip--active", active);
+      chip.setAttribute("aria-checked", String(active));
+    });
     document.body.classList.remove("theme-flash");
     void document.body.offsetWidth;
     document.body.classList.add("theme-flash");
   });
 
-  document.querySelector("#difficulty-select").addEventListener("change", (e) => {
-    state.difficulty = e.target.value;
+  document.querySelector("#difficulty-picker").addEventListener("click", (e) => {
+    const btn = e.target.closest("[data-difficulty]");
+    if (!btn) return;
+    state.difficulty = btn.dataset.difficulty;
     localStorage.setItem(DIFFICULTY_KEY, state.difficulty);
+    document.querySelectorAll("#difficulty-picker .chip").forEach((chip) => {
+      const active = chip.dataset.difficulty === state.difficulty;
+      chip.classList.toggle("chip--active", active);
+      chip.setAttribute("aria-checked", String(active));
+    });
   });
 
   document.querySelector("#new-game").addEventListener("click", () => {
