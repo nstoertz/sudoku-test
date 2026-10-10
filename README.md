@@ -1,2 +1,27 @@
-# sudoku-test
-Fun project for experimenting with Claude Code
+# Sudoku
+
+Playable single-page Sudoku in the browser, with a config-driven theme picker.
+
+The Python checker/solver (`sudoku.py`) is separate and unused by the web app.
+
+## Run locally
+
+```bash
+npm install
+npm run dev
+```
+
+Then open the URL Vite prints (usually `http://localhost:5173`).
+
+## Build
+
+```bash
+npm run build
+npm run preview   # optional: serve the production build
+```
+
+## Themes
+
+Themes live in [`src/themes.js`](src/themes.js) as one exported `themes` array. Adding a theme is mostly appending an object with `id`, `name`, `fonts`, and CSS `vars` (colors + atmosphere).
+
+Included themes: **Rainbows**, **Unicorns**, **Basketball**, **Chess**, **Taiwan**.
