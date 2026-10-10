@@ -270,7 +270,9 @@ html[data-theme="chess"] .atmosphere {
   transition: background 0.18s ease, color 0.18s ease, transform 0.15s ease;
 }
 
-.cell:hover {
+/* Hover tint is suppressed during keyboard navigation (until the pointer moves)
+   and never overrides the selected cell, so only the selection reads as active. */
+.board:not(.board--keyboard) .cell:not(.cell--selected):hover {
   background: var(--cell-hover);
 }
 
