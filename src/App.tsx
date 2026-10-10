@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   cloneBoard,
   conflictsAt,
@@ -15,6 +15,13 @@ const DIFFICULTY_KEY = "sudoku-difficulty";
 const DIFFICULTIES: Difficulty[] = ["easy", "medium", "hard"];
 
 type CellPos = { row: number; col: number };
+
+type GameState = {
+  board: Board;
+  fixed: boolean[][];
+  selected: CellPos | null;
+  won: boolean;
+};
 
 function readStoredTheme(): string {
   return localStorage.getItem(THEME_KEY) || themes[0].id;
@@ -42,14 +49,12 @@ function applyThemeToDocument(themeId: string): string {
   return theme.id;
 }
 
-function createGame(difficulty: Difficulty) {
-  const { puzzle, solution } = generatePuzzle(difficulty);
+function createGame(difficulty: Difficulty): GameState {
+  const { puzzle } = generatePuzzle(difficulty);
   return {
-    puzzle,
-    solution,
     board: cloneBoard(puzzle),
     fixed: puzzle.map((row) => row.map((v) => v !== 0)),
-    selected: null as CellPos | null,
+    selected: null,
     won: false,
   };
 }
@@ -65,7 +70,6 @@ function cellClassName(
   const val = board[r][c];
   const classes = ["cell"];
   if (fixed[r][c]) classes.push("cell--fixed");
-  if (val && !fixed[r][c]) classes.push("cell--user");
 
   const selectedVal =
     selected != null ? board[selected.row][selected.col] : 0;
@@ -94,30 +98,73 @@ function cellClassName(
 }
 
 export default function App() {
-  const [themeId, setThemeId] = useState(() => applyThemeToDocument(readStoredTheme()));
+  const [themeId, setThemeId] = useState(() =>
+    applyThemeToDocument(readStoredTheme()),
+  );
   const [difficulty, setDifficulty] = useState<Difficulty>(readStoredDifficulty);
-  const [game, setGame] = useState(() => createGame(readStoredDifficulty()));
+  const [game, setGame] = useState<GameState | null>(null);
+  const [generating, setGenerating] = useState(true);
   const [newGameSpin, setNewGameSpin] = useState(false);
   const [pressedPad, setPressedPad] = useState<number | null>(null);
 
+  const genTimerRef = useRef<number | null>(null);
+  const spinTimerRef = useRef<number | null>(null);
+  const pressTimerRef = useRef<number | null>(null);
+
   const theme = useMemo(() => getTheme(themeId), [themeId]);
   const filled = useMemo(
-    () => game.board.flat().filter(Boolean).length,
-    [game.board],
+    () => (game ? game.board.flat().filter(Boolean).length : 0),
+    [game],
   );
+
+  const clearGenTimer = () => {
+    if (genTimerRef.current != null) {
+      window.clearTimeout(genTimerRef.current);
+      genTimerRef.current = null;
+    }
+  };
+
+  const startNewGame = useCallback((nextDifficulty: Difficulty, spin = false) => {
+    clearGenTimer();
+    setGenerating(true);
+    if (spin) {
+      setNewGameSpin(true);
+      if (spinTimerRef.current != null) window.clearTimeout(spinTimerRef.current);
+      spinTimerRef.current = window.setTimeout(() => {
+        setNewGameSpin(false);
+        spinTimerRef.current = null;
+      }, 450);
+    }
+
+    // Defer heavy generation so React can paint the busy state first.
+    // A short delay (one frame+) is more reliable than 0ms with batching.
+    genTimerRef.current = window.setTimeout(() => {
+      setGame(createGame(nextDifficulty));
+      setGenerating(false);
+      genTimerRef.current = null;
+    }, 50);
+  }, []);
+
+  useEffect(() => {
+    startNewGame(readStoredDifficulty());
+    return () => {
+      clearGenTimer();
+      if (spinTimerRef.current != null) window.clearTimeout(spinTimerRef.current);
+      if (pressTimerRef.current != null) window.clearTimeout(pressTimerRef.current);
+    };
+  }, [startNewGame]);
 
   const setCell = useCallback((row: number, col: number, value: number) => {
     setGame((prev) => {
-      if (prev.fixed[row][col] || prev.won) return prev;
+      if (!prev || prev.fixed[row][col]) return prev;
       const board = cloneBoard(prev.board);
       board[row][col] = value;
-      const won = isComplete(board);
-      return { ...prev, board, won };
+      return { ...prev, board, won: isComplete(board) };
     });
   }, []);
 
   const selectCell = useCallback((row: number, col: number) => {
-    setGame((prev) => ({ ...prev, selected: { row, col } }));
+    setGame((prev) => (prev ? { ...prev, selected: { row, col } } : prev));
   }, []);
 
   const handleTheme = (id: string) => {
@@ -129,26 +176,31 @@ export default function App() {
   };
 
   const handleDifficulty = (d: Difficulty) => {
+    if (d === difficulty && !generating) return;
     setDifficulty(d);
     localStorage.setItem(DIFFICULTY_KEY, d);
+    startNewGame(d, true);
   };
 
   const handleNewGame = () => {
-    setNewGameSpin(true);
-    setGame(createGame(difficulty));
-    window.setTimeout(() => setNewGameSpin(false), 450);
+    if (generating) return;
+    startNewGame(difficulty, true);
   };
 
   const handlePad = (num: number) => {
-    if (!game.selected) return;
+    if (!game?.selected || generating) return;
     setCell(game.selected.row, game.selected.col, num);
     setPressedPad(num);
-    window.setTimeout(() => setPressedPad(null), 280);
+    if (pressTimerRef.current != null) window.clearTimeout(pressTimerRef.current);
+    pressTimerRef.current = window.setTimeout(() => {
+      setPressedPad(null);
+      pressTimerRef.current = null;
+    }, 280);
   };
 
   useEffect(() => {
     const onKeydown = (e: KeyboardEvent) => {
-      if (!game.selected) return;
+      if (!game?.selected || generating) return;
       const { row, col } = game.selected;
 
       if (e.key >= "1" && e.key <= "9") {
@@ -174,26 +226,33 @@ export default function App() {
 
     window.addEventListener("keydown", onKeydown);
     return () => window.removeEventListener("keydown", onKeydown);
-  }, [game.selected, setCell, selectCell]);
+  }, [game?.selected, generating, setCell, selectCell]);
 
   const cells = [];
   for (let r = 0; r < SIZE; r++) {
     for (let c = 0; c < SIZE; c++) {
-      const val = game.board[r][c];
+      const val = game?.board[r][c] ?? 0;
+      const fixed = game?.fixed[r][c] ?? false;
       cells.push(
         <button
           key={`${r}-${c}`}
           type="button"
-          className={cellClassName(
-            r,
-            c,
-            game.board,
-            game.fixed,
-            game.selected,
-            game.won,
-          )}
+          className={
+            game
+              ? cellClassName(
+                  r,
+                  c,
+                  game.board,
+                  game.fixed,
+                  game.selected,
+                  game.won,
+                )
+              : "cell"
+          }
           role="gridcell"
+          aria-readonly={fixed || undefined}
           aria-label={`Row ${r + 1} column ${c + 1}${val ? `, ${val}` : ", empty"}`}
+          disabled={generating || !game}
           onClick={() => selectCell(r, c)}
         >
           {val || ""}
@@ -201,6 +260,12 @@ export default function App() {
       );
     }
   }
+
+  const statusText = generating
+    ? "Generating puzzle…"
+    : game?.won
+      ? "Solved — nice work."
+      : `${filled} of 81 filled · tap a cell, then a number`;
 
   return (
     <>
@@ -219,19 +284,13 @@ export default function App() {
         <section className="controls" aria-label="Game controls">
           <div className="field field--wide">
             <span>Theme</span>
-            <div
-              className="chip-row"
-              id="theme-picker"
-              role="radiogroup"
-              aria-label="Theme"
-            >
+            <div className="chip-row" id="theme-picker" aria-label="Theme">
               {themes.map((t) => (
                 <button
                   key={t.id}
                   type="button"
                   className={`chip ${t.id === themeId ? "chip--active" : ""}`}
-                  role="radio"
-                  aria-checked={t.id === themeId}
+                  aria-pressed={t.id === themeId}
                   onClick={() => handleTheme(t.id)}
                 >
                   {t.name}
@@ -244,7 +303,6 @@ export default function App() {
             <div
               className="chip-row"
               id="difficulty-picker"
-              role="radiogroup"
               aria-label="Difficulty"
             >
               {DIFFICULTIES.map((d) => (
@@ -252,8 +310,8 @@ export default function App() {
                   key={d}
                   type="button"
                   className={`chip ${d === difficulty ? "chip--active" : ""}`}
-                  role="radio"
-                  aria-checked={d === difficulty}
+                  aria-pressed={d === difficulty}
+                  disabled={generating}
                   onClick={() => handleDifficulty(d)}
                 >
                   {d[0].toUpperCase()}
@@ -265,23 +323,23 @@ export default function App() {
           <button
             type="button"
             className={`btn btn--accent ${newGameSpin ? "is-spinning" : ""}`}
+            disabled={generating}
             onClick={handleNewGame}
           >
-            New puzzle
+            {generating ? "Generating…" : "New puzzle"}
           </button>
         </section>
 
         <p
-          className={`status ${game.won ? "status--win" : ""}`}
+          className={`status ${game?.won && !generating ? "status--win" : ""}`}
           id="status"
           role="status"
+          aria-busy={generating}
         >
-          {game.won
-            ? "Solved — nice work."
-            : `${filled} of 81 filled · tap a cell, then a number`}
+          {statusText}
         </p>
 
-        <div className={`board-wrap ${game.won ? "is-won" : ""}`}>
+        <div className={`board-wrap ${game?.won && !generating ? "is-won" : ""}`}>
           <div className="board" id="board" role="grid" aria-label="Sudoku board">
             {cells}
           </div>
@@ -293,6 +351,7 @@ export default function App() {
               key={n}
               type="button"
               className={`pad__btn ${pressedPad === n ? "is-pressed" : ""}`}
+              disabled={generating || !game}
               onClick={() => handlePad(n)}
             >
               {n}
@@ -301,6 +360,7 @@ export default function App() {
           <button
             type="button"
             className={`pad__btn pad__btn--clear ${pressedPad === 0 ? "is-pressed" : ""}`}
+            disabled={generating || !game}
             onClick={() => handlePad(0)}
           >
             Clear
