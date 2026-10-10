@@ -1,11 +1,19 @@
-const SIZE = 9;
+export const SIZE = 9;
 const BOX = 3;
 
-function emptyBoard() {
+export type Board = number[][];
+export type Difficulty = "easy" | "medium" | "hard";
+
+export type PuzzleResult = {
+  puzzle: Board;
+  solution: Board;
+};
+
+function emptyBoard(): Board {
   return Array.from({ length: SIZE }, () => Array(SIZE).fill(0));
 }
 
-function shuffle(arr) {
+function shuffle<T>(arr: T[]): T[] {
   const a = [...arr];
   for (let i = a.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
@@ -14,7 +22,7 @@ function shuffle(arr) {
   return a;
 }
 
-function isValid(board, row, col, num) {
+function isValid(board: Board, row: number, col: number, num: number): boolean {
   for (let i = 0; i < SIZE; i++) {
     if (board[row][i] === num || board[i][col] === num) return false;
   }
@@ -28,7 +36,7 @@ function isValid(board, row, col, num) {
   return true;
 }
 
-function findEmpty(board) {
+function findEmpty(board: Board): [number, number] | null {
   for (let r = 0; r < SIZE; r++) {
     for (let c = 0; c < SIZE; c++) {
       if (board[r][c] === 0) return [r, c];
@@ -37,7 +45,11 @@ function findEmpty(board) {
   return null;
 }
 
-function solve(board, countSolutions = false, limit = 2) {
+function solve(
+  board: Board,
+  countSolutions = false,
+  limit = 2,
+): boolean | number {
   const empty = findEmpty(board);
   if (!empty) return countSolutions ? 1 : true;
 
@@ -47,7 +59,7 @@ function solve(board, countSolutions = false, limit = 2) {
     if (!isValid(board, row, col, num)) continue;
     board[row][col] = num;
     if (countSolutions) {
-      solutions += solve(board, true, limit);
+      solutions += solve(board, true, limit) as number;
       board[row][col] = 0;
       if (solutions >= limit) return solutions;
     } else if (solve(board, false)) {
@@ -59,31 +71,32 @@ function solve(board, countSolutions = false, limit = 2) {
   return countSolutions ? solutions : false;
 }
 
-function fillBoard(board) {
-  return solve(board, false);
+function fillBoard(board: Board): boolean {
+  return solve(board, false) === true;
 }
 
-function cloneBoard(board) {
+export function cloneBoard(board: Board): Board {
   return board.map((row) => [...row]);
 }
 
-function countSolutions(board) {
-  return solve(cloneBoard(board), true, 2);
+function countSolutions(board: Board): number {
+  return solve(cloneBoard(board), true, 2) as number;
 }
 
 /**
- * Generate a playable puzzle.
- * @param {'easy'|'medium'|'hard'} difficulty
- * @returns {{ puzzle: number[][], solution: number[][] }}
+ * Generate a playable puzzle with a unique solution.
  */
-export function generatePuzzle(difficulty = "medium") {
-  const clues = { easy: 40, medium: 32, hard: 26 }[difficulty] ?? 32;
+export function generatePuzzle(difficulty: Difficulty = "medium"): PuzzleResult {
+  const clues = ({ easy: 40, medium: 32, hard: 26 } as const)[difficulty] ?? 32;
   const solution = emptyBoard();
   fillBoard(solution);
 
   const puzzle = cloneBoard(solution);
   const positions = shuffle(
-    Array.from({ length: SIZE * SIZE }, (_, i) => [Math.floor(i / SIZE), i % SIZE]),
+    Array.from({ length: SIZE * SIZE }, (_, i) => [
+      Math.floor(i / SIZE),
+      i % SIZE,
+    ] as [number, number]),
   );
 
   let removed = 0;
@@ -103,7 +116,7 @@ export function generatePuzzle(difficulty = "medium") {
   return { puzzle, solution };
 }
 
-export function conflictsAt(board, row, col) {
+export function conflictsAt(board: Board, row: number, col: number): boolean {
   const val = board[row][col];
   if (!val) return false;
 
@@ -122,7 +135,7 @@ export function conflictsAt(board, row, col) {
   return false;
 }
 
-export function isComplete(board) {
+export function isComplete(board: Board): boolean {
   for (let r = 0; r < SIZE; r++) {
     for (let c = 0; c < SIZE; c++) {
       if (!board[r][c] || conflictsAt(board, r, c)) return false;
@@ -130,5 +143,3 @@ export function isComplete(board) {
   }
   return true;
 }
-
-export { SIZE, cloneBoard };

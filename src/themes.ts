@@ -1,8 +1,25 @@
+export type ThemeFonts = {
+  display: string;
+  body: string;
+  board: string;
+};
+
+export type Theme = {
+  id: string;
+  name: string;
+  fonts: ThemeFonts;
+  vars: Record<string, string>;
+};
+
 /**
  * Theme registry — add a theme by appending an object to this array.
  * Each theme drives colors, fonts, and decorative atmosphere via CSS variables.
  */
-export const themes = [
+/**
+ * Theme registry — add a theme by appending an object to this array.
+ * Each theme drives colors, fonts, and decorative atmosphere via CSS variables.
+ */
+export const themes: Theme[] = [
   {
     id: "rainbows",
     name: "Rainbows",
@@ -195,6 +212,6 @@ export const themes = [
   },
 ];
 
-export function getTheme(id) {
+export function getTheme(id: string): Theme {
   return themes.find((t) => t.id === id) ?? themes[0];
 }

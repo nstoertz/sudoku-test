@@ -35,6 +35,7 @@ body.theme-flash .shell {
   position: fixed;
   inset: 0;
   z-index: -1;
+  pointer-events: none;
   background: var(--atmosphere);
   overflow: hidden;
 }
