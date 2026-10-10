@@ -106,7 +106,9 @@ export default function App() {
   const [generating, setGenerating] = useState(true);
   const [newGameSpin, setNewGameSpin] = useState(false);
   const [pressedPad, setPressedPad] = useState<number | null>(null);
+  const [keyboardNav, setKeyboardNav] = useState(false);
 
+  const boardRef = useRef<HTMLDivElement | null>(null);
   const genTimerRef = useRef<number | null>(null);
   const spinTimerRef = useRef<number | null>(null);
   const pressTimerRef = useRef<number | null>(null);
@@ -220,6 +222,7 @@ export default function App() {
       if (e.key === "ArrowRight") nc = Math.min(8, col + 1);
       if (nr !== row || nc !== col) {
         e.preventDefault();
+        setKeyboardNav(true);
         selectCell(nr, nc);
       }
     };
@@ -227,6 +230,20 @@ export default function App() {
     window.addEventListener("keydown", onKeydown);
     return () => window.removeEventListener("keydown", onKeydown);
   }, [game?.selected, generating, setCell, selectCell]);
+
+  // Keep DOM focus on the selected cell so a previously clicked cell does not
+  // keep its own :focus-visible ring after keyboard navigation.
+  const selectedRow = game?.selected?.row;
+  const selectedCol = game?.selected?.col;
+  useEffect(() => {
+    const board = boardRef.current;
+    if (!board || selectedRow == null || selectedCol == null) return;
+    if (!board.contains(document.activeElement)) return;
+    const cell = board.children[selectedRow * SIZE + selectedCol];
+    if (cell instanceof HTMLElement && cell !== document.activeElement) {
+      cell.focus();
+    }
+  }, [selectedRow, selectedCol]);
 
   const cells = [];
   for (let r = 0; r < SIZE; r++) {
@@ -340,7 +357,16 @@ export default function App() {
         </p>
 
         <div className={`board-wrap ${game?.won && !generating ? "is-won" : ""}`}>
-          <div className="board" id="board" role="grid" aria-label="Sudoku board">
+          <div
+            ref={boardRef}
+            className={`board ${keyboardNav ? "board--keyboard" : ""}`}
+            id="board"
+            role="grid"
+            aria-label="Sudoku board"
+            onPointerMove={() => {
+              if (keyboardNav) setKeyboardNav(false);
+            }}
+          >
             {cells}
           </div>
         </div>
