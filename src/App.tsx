@@ -9,6 +9,7 @@ import {
   type Difficulty,
 } from "./sudoku";
 import { getTheme, themes } from "./themes";
+import { isMuted, playSound, setMuted } from "./sounds";
 
 const THEME_KEY = "sudoku-theme";
 const DIFFICULTY_KEY = "sudoku-difficulty";
@@ -106,10 +107,13 @@ export default function App() {
   const [generating, setGenerating] = useState(true);
   const [newGameSpin, setNewGameSpin] = useState(false);
   const [pressedPad, setPressedPad] = useState<number | null>(null);
+  const [muted, setMutedState] = useState(() => isMuted());
 
   const genTimerRef = useRef<number | null>(null);
   const spinTimerRef = useRef<number | null>(null);
   const pressTimerRef = useRef<number | null>(null);
+  const gameRef = useRef(game);
+  gameRef.current = game;
 
   const theme = useMemo(() => getTheme(themeId), [themeId]);
   const filled = useMemo(
@@ -155,12 +159,21 @@ export default function App() {
   }, [startNewGame]);
 
   const setCell = useCallback((row: number, col: number, value: number) => {
-    setGame((prev) => {
-      if (!prev || prev.fixed[row][col]) return prev;
-      const board = cloneBoard(prev.board);
-      board[row][col] = value;
-      return { ...prev, board, won: isComplete(board) };
-    });
+    const prev = gameRef.current;
+    if (!prev || prev.fixed[row][col]) return;
+    if (prev.board[row][col] === value) return;
+
+    const board = cloneBoard(prev.board);
+    board[row][col] = value;
+    const won = isComplete(board);
+    const conflict = value !== 0 && conflictsAt(board, row, col);
+
+    setGame({ ...prev, board, won });
+
+    if (won) playSound("win");
+    else if (value === 0) playSound("clear");
+    else if (conflict) playSound("placeBad");
+    else playSound("placeOk");
   }, []);
 
   const selectCell = useCallback((row: number, col: number) => {
@@ -185,6 +198,12 @@ export default function App() {
   const handleNewGame = () => {
     if (generating) return;
     startNewGame(difficulty, true);
+  };
+
+  const handleMuteToggle = () => {
+    const next = !muted;
+    setMuted(next);
+    setMutedState(next);
   };
 
   const handlePad = (num: number) => {
@@ -318,6 +337,20 @@ export default function App() {
                   {d.slice(1)}
                 </button>
               ))}
+            </div>
+          </div>
+          <div className="field field--wide">
+            <span>Sound</span>
+            <div className="chip-row" aria-label="Sound">
+              <button
+                type="button"
+                className={`chip ${muted ? "" : "chip--active"}`}
+                aria-pressed={!muted}
+                aria-label={muted ? "Unmute sounds" : "Mute sounds"}
+                onClick={handleMuteToggle}
+              >
+                {muted ? "Off" : "On"}
+              </button>
             </div>
           </div>
           <button
